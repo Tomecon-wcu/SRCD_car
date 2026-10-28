@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cost Curves and Factory Size</title>
+<style>
+  :root{
+    --bg:#ffffff; --ink:#1d2433; --muted:#5b6475; --line:#3d6aa8; --axis:#3d6aa8;
+    --panel:#f4f6fa; --border:#d9dee8; --accent:#1f5fbf; --amber:#e7b400; --green:#1fa34a; --cMC:#1f5fbf; --cAVC:#1f5fbf; --cAFC:#d42020; --cATC:#7b3fb5; --red:#d42020;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  main{max-width:900px;margin:0 auto;padding:20px 16px 28px}
+  h1{font-size:1.35rem;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 14px;font-size:.95rem}
+  .wrap{display:grid;grid-template-columns:1fr 265px;gap:16px;align-items:start}
+  @media (max-width:760px){.wrap{grid-template-columns:1fr}}
+  svg{width:100%;height:auto;display:block}
+  .curve{fill:none;stroke:var(--line);stroke-width:2.4}
+  .axis{stroke:var(--axis);stroke-width:2.6}
+  .lbl{font-size:15px;fill:var(--ink)}
+  .guide{stroke:#9aa3b2;stroke-width:1.2;stroke-dasharray:4 4}
+  .dot{stroke:#000;stroke-width:1}
+  .controls{margin-top:10px;display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center}
+  .qrow{flex:1 1 100%;display:flex;align-items:center;gap:12px}
+  .qrow label{font-weight:600;white-space:nowrap;min-width:12.5em}
+  input[type=range]{flex:1;accent-color:var(--accent);height:28px}
+  button{font:inherit;padding:7px 14px;border-radius:8px;border:1px solid var(--border);
+    background:#fff;color:var(--ink);cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  #reset{background:var(--ink);color:#fff;border-color:var(--ink);font-weight:700;padding:8px 18px;letter-spacing:.02em}
+  #reset:hover{background:#000;border-color:#000}
+  button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .vol{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.9rem}
+  .vol input{width:110px;flex:none}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+  .panel table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  .panel td{padding:3px 0}
+  .panel td:last-child{text-align:right;font-weight:600}
+  .panel h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 6px}
+  .note{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:.92rem}
+  .rpm{margin-top:10px;font-size:.85rem;color:var(--muted)}
+  .bar{position:relative;height:8px;border-radius:4px;background:linear-gradient(90deg,#3d6aa8,#e7b400 72%,#d42020);overflow:hidden;margin-top:4px}
+  #pMC,#tMC{stroke:var(--cMC)} #pAVC{stroke:var(--cAVC)} #pAFC{stroke:var(--cAFC)} #pATC{stroke:var(--cATC);stroke-width:3.8}
+  #tMC{fill:var(--cMC);stroke:none} #tAVC{fill:var(--cAVC)} #tAFC{fill:var(--cAFC)} #tATC{fill:var(--cATC)}
+  .lbl{font-weight:600}
+  .k-MC{color:var(--cMC)} .k-AVC{color:var(--cAVC)} .k-AFC{color:var(--cAFC)} .k-ATC{color:var(--cATC)}
+  .panel td.k-MC,.panel td.k-AVC,.panel td.k-AFC,.panel td.k-ATC{font-weight:600}
+  .dot{stroke:#1d2433;stroke-width:1.5}
+  .show{flex:1 1 100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+  .show .gl{font-weight:600;margin-right:2px}
+  .chip{display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border-radius:999px;font-weight:600}
+  .chip i{width:18px;height:0;border-top:3px solid currentColor;border-radius:2px}
+  .chip[aria-pressed=false]{color:var(--muted)!important;background:#fff;opacity:.65}
+  .chip[aria-pressed=false] i{border-top-style:dashed}
+  .chip[aria-pressed=false] span{text-decoration:line-through}
+  .off{display:none}
+  tr.dim td{opacity:.35}
+  .ghost{fill:none;stroke:var(--cATC);stroke-width:1.4;stroke-dasharray:5 5;opacity:.35}
+  .glbl{font-size:12px;fill:var(--muted)}
+  .tick{font-size:12px;fill:var(--muted)} .tickm{stroke:var(--axis);stroke-width:1.5}
+  .atitle{font-size:13px;font-weight:600;fill:var(--ink)}
+  .crow{flex:1 1 100%;display:flex;align-items:center;gap:12px}
+  .crow label{font-weight:600;white-space:nowrap;min-width:12.5em}
+  .crow output{min-width:3.5em;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+  .gears{display:flex;align-items:center;gap:8px}
+  .gears .gl{font-weight:600;white-space:nowrap}
+  .gate{display:inline-flex;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .gate button{border:0;border-radius:0;border-right:1px solid var(--border);padding:6px 14px;line-height:1.15;text-align:center}
+  .gate button:last-child{border-right:0}
+  .gate button small{display:block;font-size:.72rem;opacity:.8}
+  @media (max-width:520px){.qrow,.crow{flex-wrap:wrap;gap:4px 10px}.qrow label,.crow label{min-width:0;flex:1 1 100%}.qrow input,.crow input{min-width:0}.gears{flex-wrap:wrap}.gate button{padding:6px 9px;font-size:.9rem}.gate button small{font-size:.66rem}}
+  .mathwrap{margin-top:20px}
+  #mathBtn{font-weight:600}
+  #mathBtn[aria-expanded=true]{background:var(--panel);border-color:var(--accent)}
+  .math{margin-top:12px;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px 18px;line-height:1.6}
+  .math h3{font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 0 6px}
+  .math h3:first-child{margin-top:0}
+  .math .eq{font-family:"Cambria Math","STIX Two Math","Times New Roman",serif;font-size:1.06rem;margin:2px 0 2px 8px}
+  .math .eq var{font-style:italic}
+  .math table{border-collapse:collapse;font-variant-numeric:tabular-nums;margin:4px 0 0 8px}
+  .math td{padding:2px 14px 2px 0}
+  .math td:nth-child(2){text-align:right;font-weight:600}
+  .math .muted{color:var(--muted);font-size:.9rem}
+  .math .cols{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px}
+  @media (max-width:640px){.math .cols{grid-template-columns:1fr}}
+  .credit{margin-top:22px;padding-top:12px;border-top:1px solid var(--border);color:var(--muted);font-size:.85rem;line-height:1.5}
+  .credit a{color:var(--accent)}
+  .bar span{position:absolute;right:0;top:0;height:100%;width:100%;background:#e3e7ef;transition:width .1s}
+</style>
+</head>
+<body>
+<main>
+  <h1>Short-Run Cost Curves and Factory Size</h1>
+  <p class="sub">Drag the slider to change output (q) and watch each cost curve respond. Change input prices to shift the curves, choose a factory size to see a larger factory's minimum ATC move to the right, and pick economies or diseconomies of scale to make larger factories cheaper or costlier. Turn on the sound to hear production strain as output rises.</p>
+
+  <div class="wrap">
+    <div>
+      <svg id="chart" viewBox="0 0 720 470" role="img" aria-label="Short-run cost diagram with MC, ATC, AVC and AFC curves and markers at the selected quantity">
+        <line class="axis" x1="70" y1="20" x2="70" y2="420"/>
+        <line class="axis" x1="70" y1="420" x2="640" y2="420"/>
+        <text class="atitle" x="70" y="12">$ per unit</text>
+        <text class="atitle" x="640" y="462" text-anchor="end">q</text>
+        <g id="ticks"></g>
+        <defs><clipPath id="plot"><rect x="71" y="14" width="600" height="405"/></clipPath></defs>
+        <g clip-path="url(#plot)">
+          <path id="g0" class="ghost"/><path id="g1" class="ghost"/><path id="g2" class="ghost"/><path id="g3" class="ghost"/>
+        </g>
+        <text id="gl0" class="glbl"></text><text id="gl1" class="glbl"></text><text id="gl2" class="glbl"></text><text id="gl3" class="glbl"></text>
+        <line id="guide" class="guide" x1="0" y1="420" x2="0" y2="20"/>
+        <g clip-path="url(#plot)">
+          <path id="pMC" class="curve"/><path id="pATC" class="curve"/>
+          <path id="pAVC" class="curve"/><path id="pAFC" class="curve"/>
+        </g>
+        <text id="tMC" class="lbl">MC</text><text id="tATC" class="lbl">ATC</text>
+        <text id="tAVC" class="lbl">AVC</text><text id="tAFC" class="lbl">AFC</text>
+        <circle id="dAFC" class="dot" r="9" fill="#111"/>
+        <circle id="dAVC" class="dot" r="9" fill="#111"/>
+        <circle id="dMC"  class="dot" r="9" fill="#111"/>
+        <circle id="dATC" class="dot" r="9" fill="#111"/>
+      </svg>
+
+      <div class="controls">
+        <div class="qrow">
+          <label for="q">Output, q</label>
+          <input id="q" type="range" min="0" max="25.5" step="0.01" value="1.2"><output id="qOut" style="min-width:3.5em;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums"></output>
+        </div>
+        <div class="crow">
+          <label for="vc">Variable input price</label>
+          <input id="vc" type="range" min="50" max="150" step="1" value="100"><output id="vcOut">100%</output>
+        </div>
+        <div class="crow">
+          <label for="fc">Fixed input price</label>
+          <input id="fc" type="range" min="50" max="150" step="1" value="100"><output id="fcOut">100%</output>
+        </div>
+        <div class="gears" role="group" aria-label="Factory size">
+          <span class="gl">Factory size</span>
+          <div class="gate">
+            <button type="button" data-g="0">Small</button>
+            <button type="button" data-g="1">Medium</button>
+            <button type="button" data-g="2">Large</button>
+            <button type="button" data-g="3">Extra large</button>
+          </div>
+        </div>
+        <div class="gears" role="group" aria-label="Returns to scale">
+          <span class="gl">Scale</span>
+          <div class="gate">
+            <button type="button" data-s="econ">Economies<small>bigger is cheaper</small></button>
+            <button type="button" data-s="const">Constant<small>same cost</small></button>
+            <button type="button" data-s="dis">Diseconomies<small>bigger costs more</small></button>
+            <button type="button" data-s="both">Both<small>cheaper, then costlier</small></button>
+          </div>
+        </div>
+        <button id="play" type="button">▶ Play</button>
+        <button id="reset" type="button">↺ Reset</button>
+        <button id="sound" type="button" aria-pressed="false">Sound: off</button>
+        <div class="vol"><label for="vol">Volume</label><input id="vol" type="range" min="0" max="1" step="0.01" value="0.6"></div>
+        <div class="show" role="group" aria-label="Show or hide curves">
+          <span class="gl">Show</span>
+          <button type="button" class="chip k-MC"  data-c="MC"  aria-pressed="true"><i></i><span>MC</span></button>
+          <button type="button" class="chip k-ATC" data-c="ATC" aria-pressed="true"><i></i><span>ATC</span></button>
+          <button type="button" class="chip k-AVC" data-c="AVC" aria-pressed="true"><i></i><span>AVC</span></button>
+          <button type="button" class="chip k-AFC" data-c="AFC" aria-pressed="true"><i></i><span>AFC</span></button>
+          <button type="button" class="chip" data-c="ghost" aria-pressed="true" style="color:var(--cATC)"><i style="border-top-style:dashed"></i><span>Other factories</span></button>
+        </div>
+      </div>
+    </div>
+
+    <aside class="panel" aria-live="polite">
+      <h2>At this output</h2>
+      <table>
+        <tr><td>Factory size</td><td id="vG"></td></tr>
+        <tr><td>Output, q</td><td id="vQ"></td></tr>
+        <tr id="rMC"><td class="k-MC">MC</td><td id="vMC"></td></tr>
+        <tr id="rATC"><td class="k-ATC">ATC</td><td id="vATC"></td></tr>
+        <tr id="rAVC"><td class="k-AVC">AVC</td><td id="vAVC"></td></tr>
+        <tr id="rAFC"><td class="k-AFC">AFC</td><td id="vAFC"></td></tr>
+      </table>
+      <div class="note" id="note"></div>
+      <div class="rpm">Capacity use<div class="bar"><span id="rpmBar"></span></div></div>
+    </aside>
+  </div>
+  <div class="mathwrap">
+    <button id="mathBtn" type="button" aria-expanded="false" aria-controls="math">Show the math ▾</button>
+    <section id="math" class="math" hidden aria-live="polite">
+      <div class="cols">
+        <div>
+          <h3>Definitions</h3>
+          <div class="eq"><var>TC</var> = <var>FC</var> + <var>VC</var>(<var>q</var>)</div>
+          <div class="eq"><var>AFC</var> = <var>FC</var> / <var>q</var> &nbsp;&nbsp; <var>AVC</var> = <var>VC</var> / <var>q</var></div>
+          <div class="eq"><var>ATC</var> = <var>TC</var> / <var>q</var> = <var>AFC</var> + <var>AVC</var></div>
+          <div class="eq"><var>MC</var> = d<var>TC</var>/d<var>q</var> = d<var>VC</var>/d<var>q</var></div>
+          <div class="eq">Minimum <var>ATC</var> is where <var>MC</var> = <var>ATC</var></div>
+        </div>
+        <div>
+          <h3>This model's cost function</h3>
+          <div class="eq"><var>FC</var> = 25 · <var>k</var> · <var>c</var> · <var>p<sub>F</sub></var></div>
+          <div class="eq"><var>VC</var> = <var>c</var> · <var>p<sub>V</sub></var> · (0.5<var>q</var> − 0.0075<var>q</var><sup>2</sup>/<var>k</var> + 0.00005<var>q</var><sup>3</sup>/<var>k</var><sup>2</sup>)</div>
+          <div class="muted" style="margin:4px 0 0 8px"><var>k</var> = factory size (Small 0.6, Medium 1, Large 1.4, Extra large 1.8);
+            <var>c</var> = returns-to-scale cost multiplier; <var>p<sub>V</sub></var>, <var>p<sub>F</sub></var> = variable and fixed input prices (1 = 100%).</div>
+        </div>
+      </div>
+      <h3>With the current settings</h3>
+      <div class="eq" id="mParams"></div>
+      <div class="eq" id="mFC"></div>
+      <div class="eq" id="mVC"></div>
+      <div class="eq" id="mMC"></div>
+      <div class="cols">
+        <div>
+          <h3 id="mAtQ">At this output</h3>
+          <table id="mNow"></table>
+        </div>
+        <div>
+          <h3>Minimum ATC for this factory</h3>
+          <div class="eq" id="mMin"></div>
+          <div class="muted" id="mMinNote" style="margin-left:8px"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+(() => {
+  // ---- Cost model (gear 2 / medium plant): FC = 200, VC = 40q - 6q^2 + 0.4q^3 ----
+  // min AVC at q = 7.5; min ATC at q = 10 ($40); MC crosses both minima.
+  // Each gear is the same technology at scale k: FC_k = k*FC and VC_k(q) = k*VC(q/k),
+  // so every curve becomes f(q/k) and minimum ATC moves to q = 10k at the same $40.
+  // Display units: q x 10 = mph; $ x 0.0125 = dollars per mile (base minimum ATC = $0.50).
+  // vM scales variable cost (fuel), fM scales fixed cost (vehicle rental).
+  const FC = 200;
+  let vM = 1, fM = 1;
+  const AVC0 = q => 40 - 6*q + 0.4*q*q, MC0 = q => 40 - 12*q + 1.2*q*q, AFC0 = q => FC / q;
+  const AVC = q => vM * AVC0(q);
+  const AFC = q => fM * AFC0(q);
+  const ATC = q => AVC(q) + AFC(q);
+  const MC  = q => vM * MC0(q);
+  const QUNITS = q => q * 10 /* displayed units of output */, USD = v => v * 0.0125;
+  // where minimum ATC falls (MC = ATC): solve 0.8 vM e^3 - 6 vM e^2 - 200 fM = 0
+  let eStar = 10, atcMin = 40;
+  function findMin() {
+    let e = 10;
+    for (let i = 0; i < 30; i++) {
+      const g = 0.8 * vM * e ** 3 - 6 * vM * e * e - FC * fM, dg = 2.4 * vM * e * e - 12 * vM * e;
+      e -= g / dg;
+    }
+    eStar = e; atcMin = ATC(e);
+  }
+  const GEARS = [0.6, 1.0, 1.4, 1.8], NAMES = ["Small", "Medium", "Large", "Extra large"];
+  const QMIN = 1.2, QMAX = 25.5;
+  // returns to scale: each plant's costs are multiplied by c (its minimum ATC is $40 x c)
+  const SCALE = { econ: [1, 0.85, 0.72, 0.62], const: [1, 1, 1, 1], dis: [1, 1.15, 1.32, 1.5],
+                  both: [1, 0.85, 0.75, 0.92] };   // economies through Large, diseconomies at Extra large
+  let gear = 0, kCur = GEARS[0], mode = "const", cCur = 1, ghostC = SCALE.const.slice();
+
+  const X = q => 70 + (q / 26) * 570;
+  const Y = v => 420 - (v / 140) * 400;
+  const $ = id => document.getElementById(id);
+  const scaled = (f, k, c = 1) => q => c * f(q / k);
+
+  const path = (f, a, b) => {
+    let d = "";
+    for (let i = 0; i <= 300; i++) {
+      const q = a + (b - a) * i / 300, v = Math.min(400, f(q));
+      d += (i ? "L" : "M") + X(q).toFixed(1) + "," + Y(v).toFixed(1);
+    }
+    return d;
+  };
+  // label each curve where it leaves the plot (top edge or right end)
+  function label(id, f, dy) {
+    let q = QMAX;
+    for (let x = QMAX; x > 2; x -= 0.02) { if (f(x) <= 132) { q = x; break; } }
+    const top = q < QMAX - 0.05;   // curve leaves through the top of the plot
+    const left = top && id === "tATC";   // keep ATC and AVC labels apart when both leave through the top
+    const t = $(id); t.setAttribute("text-anchor", left ? "end" : "start");
+    t.setAttribute("x", Math.min(688, X(q) + (left ? -8 : top ? 8 : 10))); t.setAttribute("y", top ? 34 : Math.max(28, Y(f(q)) + dy));
+  }
+  function drawCurves(k, c = cCur) {
+    const f = { MC: scaled(MC, k, c), ATC: scaled(ATC, k, c), AVC: scaled(AVC, k, c), AFC: scaled(AFC, k, c) };
+    for (const id in f) $("p" + id).setAttribute("d", path(f[id], 0.4, QMAX + 0.4));
+    label("tMC", f.MC, 4); label("tATC", f.ATC, -8); label("tAVC", f.AVC, 14); label("tAFC", f.AFC, -8);
+  }
+  // faint ATC curves for every plant size, labelled at their minimum
+  function drawGhosts(cs) {
+    GEARS.forEach((k, i) => {
+      $("g" + i).setAttribute("d", path(scaled(ATC, k, cs[i]), 0.4, QMAX + 0.4));
+      const t = $("gl" + i); t.textContent = NAMES[i];
+      t.setAttribute("x", X(eStar * k)); t.setAttribute("text-anchor", "middle"); t.setAttribute("y", Math.min(410, Y(atcMin * cs[i]) + 22));
+    });
+  }
+  drawGhosts(ghostC);
+  // axis ticks: every 50 mph and every $0.25 per mile
+  (function ticks() {
+    let h = "";
+    for (let m = 0; m <= 250; m += 50) { const x = X(m / 10);
+      h += `<line class="tickm" x1="${x}" y1="420" x2="${x}" y2="426"/><text class="tick" x="${x}" y="440" text-anchor="middle">${m}</text>`; }
+    for (let d = 0.25; d <= 1.5001; d += 0.25) { const y = Y(d / 0.0125);
+      h += `<line class="tickm" x1="64" y1="${y}" x2="70" y2="${y}"/><text class="tick" x="60" y="${y + 4}" text-anchor="end">${d.toFixed(2)}</text>`; }
+    $("ticks").innerHTML = h;
+  })();
+
+  const slider = $("q"), fmt = v => USD(v).toFixed(2);
+  const qe = () => +slider.value / kCur;             // engine speed: output relative to plant size
+
+  // traffic-light dots: red at low output, yellow, green near minimum ATC, then yellow and red again
+  // blend by hue so the in-between shades stay bright (orange, lime) rather than muddy
+  const RED = [2, 76, 48], YEL = [48, 95, 50], GRN = [140, 68, 38];   // [hue, saturation %, lightness %]
+  const mixC = (a, b, u) => { const c = a.map((v, i) => v + (b[i] - v) * u); return `hsl(${c[0].toFixed(0)} ${c[1].toFixed(0)}% ${c[2].toFixed(0)}%)`; };
+  const ramp = (x, a, b) => Math.min(1, Math.max(0, (x - a) / (b - a)));
+  // each dot is colored by how high it sits on its own curve: green near the curve's low point,
+  // yellow in the middle, red when it climbs high. [green, yellow, red] thresholds in base dollars;
+  // ATC is green at its minimum ($40), whatever the plant size or scale setting.
+  const BANDS = { MC: [13, 22, 70], ATC: [43, 58, 85], AVC: [20, 30, 50], AFC: [25, 50, 90] };
+  // colors judge each curve's shape, so fuel / rental changes don't repaint everything
+  const BASE = { MC: e => MC0(e), AVC: e => AVC0(e), AFC: e => AFC0(e), ATC: e => ATC(e) / atcMin * 40 };
+  function dotColor(v, [g, y, r]) {
+    return v <= y ? mixC(GRN, YEL, ramp(v, g, y)) : mixC(YEL, RED, ramp(v, y, r));
+  }
+  function zone(e) { return e >= 14 ? "red" : (e > 10.05 ? "amber" : "normal"); }
+
+  function draw(q) {
+    const k = kCur, e = q / k;
+    for (const [id, f] of [["MC", MC], ["ATC", ATC], ["AVC", AVC], ["AFC", AFC]]) {
+      const c = $("d" + id), v = cCur * f(e); c.setAttribute("cx", X(q)); c.setAttribute("cy", Y(Math.min(v, 150)));
+      const none = q <= 0 || !(v <= 140);
+      c.style.visibility = none ? "hidden" : "visible";
+      $("v" + id).textContent = q <= 0 || !isFinite(v) ? "undefined" : "$" + fmt(v);
+    }
+    const er = e * 10 / eStar, z = zone(er), atMin = !morph && Math.abs(er - 10) < 0.35;
+    if (!morph) for (const id of ["MC", "ATC", "AVC", "AFC"])
+      $("d" + id).setAttribute("fill", dotColor(BASE[id](e), BANDS[id]));
+    $("guide").setAttribute("x1", X(q)); $("guide").setAttribute("x2", X(q));
+    $("vQ").textContent = QUNITS(q).toFixed(0); $("qOut").textContent = QUNITS(q).toFixed(0);
+    $("vG").textContent = NAMES[gear];
+    const mc = MC(e), atc = ATC(e);
+    $("note").textContent =
+      q <= 0 ? "At zero output there are no units to spread costs over, so the per-unit costs are undefined, yet the firm still pays its fixed cost." :
+      atMin ? "MC = ATC: this factory's average total cost is at its minimum." :
+      er < 4 && gear > 0 ? "This factory is too large for so little output. Its fixed cost is spread over very few units, so ATC is high." :
+      er < 4 ? "At low output, fixed cost is spread over very few units, so ATC is high." :
+      mc < atc ? "MC is below ATC, so producing more pulls average total cost down." :
+      z === "red" ? "MC is climbing steeply. Each extra unit is very costly to produce." :
+                    "MC is above ATC, so producing more pushes average total cost up.";
+    $("rpmBar").style.width = (100 - 100 * Math.max(0, rpmFor(e) - 850) / (6100 - 850)).toFixed(1) + "%";
+    document.querySelectorAll(".gate button[data-s]").forEach(b => {
+      const on = b.dataset.s === mode; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on);
+    });
+    document.querySelectorAll(".gate button[data-g]").forEach(b => {
+      const on = +b.dataset.g === gear; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on);
+    });
+    engine.update(e);
+    if (!$("math").hidden) showMath(q);
+  }
+
+  // ---- "Show the math": the model's equations with the current numbers filled in ----
+  const n = (x, d = 4) => {                       // tidy number: no trailing zeros
+    if (!isFinite(x)) return "undefined";
+    const s = Math.abs(x) >= 1 ? x.toFixed(2) : x.toPrecision(3);
+    return (+s).toString();
+  };
+  const money = x => isFinite(x) ? "$" + x.toFixed(2) : "undefined";
+  function showMath(q) {
+    const g = GEARS[gear], c = SCALE[mode][gear], k = morph ? kCur : g, cc = morph ? cCur : c;
+    const Q = QUNITS(q);                                    // displayed output
+    const FCd = 25 * k * cc * fM;
+    const A = 0.5 * cc * vM, B = 0.0075 * cc * vM / k, D = 0.00005 * cc * vM / (k * k);
+    const VC = A * Q - B * Q * Q + D * Q ** 3, MCd = A - 2 * B * Q + 3 * D * Q * Q;
+    $("mParams").innerHTML = `<var>k</var> = ${n(k)} (${NAMES[gear].toLowerCase()}), &nbsp;<var>c</var> = ${n(cc)}, &nbsp;` +
+      `<var>p<sub>V</sub></var> = ${n(vM)}, &nbsp;<var>p<sub>F</sub></var> = ${n(fM)}`;
+    $("mFC").innerHTML = `<var>FC</var> = ${money(FCd)}`;
+    $("mVC").innerHTML = `<var>VC</var> = ${n(A)}<var>q</var> − ${n(B)}<var>q</var><sup>2</sup> + ${n(D)}<var>q</var><sup>3</sup>`;
+    $("mMC").innerHTML = `<var>MC</var> = ${n(A)} − ${n(2 * B)}<var>q</var> + ${n(3 * D)}<var>q</var><sup>2</sup>`;
+    $("mAtQ").innerHTML = 'At this output (<span style="text-transform:none">q</span> = ' + Q.toFixed(0) + ")";
+    const rows = Q > 0
+      ? [["FC", money(FCd)], ["VC", money(VC)], ["TC = FC + VC", money(FCd + VC)],
+         ["AFC = FC / q", money(FCd / Q)], ["AVC = VC / q", money(VC / Q)],
+         ["ATC = TC / q", money((FCd + VC) / Q)], ["MC", money(MCd)]]
+      : [["FC", money(FCd)], ["VC", money(0)], ["TC = FC + VC", money(FCd)],
+         ["AFC, AVC, ATC", "undefined (q = 0)"], ["MC", money(MCd)]];
+    $("mNow").innerHTML = rows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join("");
+    const qs = 10 * k * eStar, atcS = USD(atcMin) * cc;
+    $("mMin").innerHTML = `<var>q</var>* = ${qs.toFixed(1)}, &nbsp;<var>ATC</var>* = <var>MC</var>(<var>q</var>*) = ${money(atcS)}`;
+    $("mMinNote").textContent = "Found by solving MC = ATC.";
+  }
+  $("mathBtn").addEventListener("click", () => {
+    const open = $("math").hidden;
+    $("math").hidden = !open;
+    $("mathBtn").setAttribute("aria-expanded", open);
+    $("mathBtn").textContent = open ? "Hide the math ▴" : "Show the math ▾";
+    if (open) showMath(+slider.value);
+  });
+
+  // ---- Shifting: rebuild the curves by easing the plant size to the new gear ----
+  let morph = null;
+  function animateTo(k1, c1, cs1) {
+    const k0 = kCur, c0 = cCur, cs0 = ghostC.slice(), t0 = performance.now(), T = 450;
+    if (morph) cancelAnimationFrame(morph);
+    const step = now => {
+      const u = Math.min(1, (now - t0) / T), s = u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+      kCur = k0 + (k1 - k0) * s; cCur = c0 + (c1 - c0) * s;
+      ghostC = cs0.map((v, i) => v + (cs1[i] - v) * s); drawGhosts(ghostC);
+      drawCurves(kCur, cCur); draw(+slider.value);
+      morph = u < 1 ? requestAnimationFrame(step) : null;
+      if (!morph) draw(+slider.value);
+    };
+    morph = requestAnimationFrame(step);
+  }
+  function shiftTo(g) {
+    if (g === gear || g < 0 || g >= GEARS.length) return;
+    const SC = SCALE[mode], better = SC[g] < SC[gear] - 1e-9, worse = SC[g] > SC[gear] + 1e-9;
+    gear = g; engine.clutch(better ? "bov" : worse ? "grind" : null);
+    animateTo(GEARS[g], SC[g], SC);
+  }
+  function setScale(m) {
+    if (m === mode) return;
+    mode = m; animateTo(kCur, SCALE[m][gear], SCALE[m]);
+  }
+
+  // ---- Engine sound: a physically inspired V8, generated live ----
+  // Each cylinder firing is its own pressure pulse (slightly different every time), sent down
+  // two exhaust banks that resonate like pipes, then through a muffler. Lugging = misfires and
+  // uneven timing; the rev limiter = ignition cuts; strain = heavy throttle and a raspy exhaust.
+  function rpmFor(e) { return 850 + Math.min(1, Math.max(-0.12, (e - 2) / 12)) * (6100 - 850); }
+
+  const DSP_SRC = `
+  class EngineDSP {
+    constructor(sr) {
+      this.sr = sr;
+      this.p = { rpm: 850, load: 0, smooth: 0, strain: 0, lug: 0, limit: 0, vol: 0, on: 0, eff: 0, fx: null };
+      this.s = { rpm: 850, load: 0, smooth: 0, strain: 0, lug: 0, limit: 0, vol: 0, eff: 0 };
+      this.phase = 0; this.slot = -1; this.t = 0;
+      this.cylAmp = [1, .84, .95, .79, 1.06, .9, .82, .97];   // cylinders never fire identically
+      this.bank   = [0, 1, 1, 0, 1, 0, 0, 1];                 // cross-plane V8: uneven pulses per bank
+      this.pend = new Float32Array(8).fill(-1);
+      this.env = [0, 0]; this.lp1 = [0, 0]; this.lp2 = [0, 0];
+      this.dl = [new Float32Array(4096), new Float32Array(4096)]; this.di = 0;
+      this.L = [Math.round(.0031 * sr), Math.round(.0043 * sr)];   // two pipe lengths
+      this.loopLp = [0, 0];
+      this.m1 = 0; this.m2 = 0; this.m3 = 0;                       // muffler
+      this.bpL = 0; this.bpB = 0;                                  // intake noise filter
+      this.hp = 0; this.hpx = 0;
+      this.limPh = 0; this.rpmMod = 0; this.clutchT = 1e9; this.cg = 1;
+      this.fxT = 1e9; this.fxType = null; this.fL = 0; this.fB = 0; this.raspPh = 0;   // shift sound effects
+      this.seed = 12345;
+    }
+    rnd() { this.seed = (this.seed * 1664525 + 1013904223) >>> 0; return this.seed / 4294967296; }
+    clutch() { this.clutchT = 0; }
+    process(out) {
+      const sr = this.sr, p = this.p, s = this.s, n = out.length;
+      const kf = 1 - Math.exp(-1 / (0.06 * sr)), kr = 1 - Math.exp(-1 / (0.10 * sr));
+      const decay = Math.exp(-1 / (0.0011 * sr));
+      if (p.fx) { this.fxType = p.fx; this.fxT = 0; p.fx = null; }
+      for (let i = 0; i < n; i++) {
+        s.rpm += (p.rpm - s.rpm) * kr;
+        for (const k of ["load", "smooth", "strain", "lug", "limit", "vol", "eff"]) s[k] += (p[k] - s[k]) * kf;
+        this.t += 1 / sr;
+
+        // rev limiter: ignition cut about 11 times a second, rpm bouncing off the limit
+        let cut = false;
+        if (s.limit > 0.5) { this.limPh = (this.limPh + 11 / sr) % 1; cut = this.limPh < 0.38; }
+        this.rpmMod += ((cut ? -260 : 40) * s.limit - this.rpmMod) * (1 - Math.exp(-1 / (0.03 * sr)));
+
+        // clutch: brief lift-off during a gear change
+        this.clutchT += 1 / sr;
+        const cgT = this.clutchT < 0.07 ? 0.25 : this.clutchT < 0.3 ? 0.25 : 1;
+        this.cg += (cgT - this.cg) * (1 - Math.exp(-1 / (0.04 * sr)));
+
+        // lugging: the crank speed wobbles
+        const wob = 1 + s.lug * (0.07 * Math.sin(2 * Math.PI * 1.6 * this.t) + 0.04 * Math.sin(2 * Math.PI * 3.9 * this.t))
+                      + Math.max(0, -s.eff) * 0.018 * Math.sin(2 * Math.PI * 2.3 * this.t);   // uneven running in a costly plant
+        const rpm = Math.max(380, (s.rpm + this.rpmMod) * wob);
+
+        // 4-stroke: one full cycle every 2 revolutions, 8 firings per cycle
+        this.phase = (this.phase + rpm / 120 / sr) % 1;
+        const slot = Math.floor(this.phase * 8);
+        if (slot !== this.slot) {
+          this.slot = slot;
+          const jit = (0.00015 + 0.0028 * s.lug) * (1 - 0.7 * s.smooth);
+          this.pend[slot] = Math.floor(this.rnd() * jit * sr);
+        }
+        const exc = [0, 0];
+        for (let c = 0; c < 8; c++) {
+          if (this.pend[c] < 0) continue;
+          if (this.pend[c]-- > 0) continue;
+          this.pend[c] = -1;
+          const misfire = this.rnd() < s.lug * 0.2 + 0.06 * Math.max(0, -s.eff) || (cut && this.rnd() < 0.85);
+          if (misfire) continue;
+          const rough = Math.max(0, -s.eff), sweet = Math.max(0, s.eff);
+          const vary = 1 + (0.22 + 0.5 * s.lug + 0.15 * s.strain - 0.15 * s.smooth + 0.45 * rough - 0.1 * sweet) * (this.rnd() - 0.5);
+          const amp = Math.pow(this.cylAmp[c], 1 - 0.8 * s.smooth) * vary * (0.55 + 0.55 * s.load + 0.45 * s.strain) * this.cg;
+          exc[this.bank[c]] += amp;
+        }
+
+        // pulse -> exhaust pipe (feedback delay with a damped loop) for each bank
+        let pipes = 0, envSum = 0;
+        const fb = 0.5 + 0.18 * s.strain - 0.08 * s.smooth;
+        const aPulse = 1 - Math.exp(-2 * Math.PI * 1800 / sr), aLoop = 1 - Math.exp(-2 * Math.PI * 2600 / sr);
+        for (let b = 0; b < 2; b++) {
+          this.env[b] = this.env[b] * decay + exc[b];
+          const grit = 1 + (0.35 + 0.6 * s.strain + 0.4 * s.lug - 0.3 * s.smooth + 0.6 * Math.max(0, -s.eff) - 0.15 * Math.max(0, s.eff)) * (this.rnd() * 2 - 1);
+          const x = this.env[b] * grit;
+          this.lp1[b] += (x - this.lp1[b]) * aPulse; this.lp2[b] += (this.lp1[b] - this.lp2[b]) * aPulse;
+          const d = this.dl[b], L = this.L[b];
+          const back = d[(this.di - L + 4096) & 4095];
+          this.loopLp[b] += (back - this.loopLp[b]) * aLoop;
+          const y = this.lp2[b] - fb * this.loopLp[b];
+          d[this.di] = y;
+          pipes += y * (b ? 0.9 : 1); envSum += this.env[b];
+        }
+        this.di = (this.di + 1) & 4095;
+
+        // muffler: darker at low rpm, opens up with rpm and throttle
+        const rn = Math.min(1, Math.max(0, (rpm - 800) / 5300));
+        const fc = (380 + 1700 * rn + 900 * s.load + 1300 * s.strain - 200 * s.smooth) * (1 - 0.18 * Math.max(0, -s.eff) + 0.08 * Math.max(0, s.eff));
+        const am = 1 - Math.exp(-2 * Math.PI * fc / sr);
+        this.m1 += (pipes - this.m1) * am; this.m2 += (this.m1 - this.m2) * am; this.m3 += (this.m2 - this.m3) * Math.min(1, am * 1.6);
+        let sig = 0.75 * this.m2 + 0.5 * this.m3;
+
+        // intake roar: breathy noise that follows the firing pulses, louder under load
+        const nz = this.rnd() * 2 - 1, f = 2 * Math.sin(Math.PI * Math.min(0.2, (600 + 1600 * rn) / sr));
+        this.bpL += f * this.bpB; const hpn = nz - this.bpL - 0.9 * this.bpB; this.bpB += f * hpn;
+        sig += this.bpB * (0.015 + 0.12 * s.load + 0.22 * s.strain) * (0.4 + Math.min(1.5, envSum));
+
+        // smooth running near minimum ATC: a warm, steady tone under the engine
+        sig += s.smooth * 0.11 * (Math.sin(2 * Math.PI * this.phase * 4) + 0.5 * Math.sin(2 * Math.PI * this.phase * 8));
+
+        // strain: a hard-driven exhaust saturates
+        const drive = 1.2 + 4 * s.strain;
+        sig = Math.tanh(sig * drive) / Math.pow(drive, 0.8);
+
+        // remove DC / subsonic rumble
+        const hpk = Math.exp(-2 * Math.PI * 30 / sr);
+        const yhp = hpk * (this.hp + sig - this.hpx); this.hpx = sig; this.hp = yhp;
+        // shift effects: turbo blow-off "pssh" (costs fall) or a gear grind (costs rise)
+        let fxs = 0;
+        if (this.fxT < 0.6) {
+          const T = this.fxT, nz2 = this.rnd() * 2 - 1;
+          if (this.fxType === "bov") {
+            const fc2 = 900 + 3600 * Math.exp(-T / 0.12), g = 2 * Math.sin(Math.PI * Math.min(0.2, fc2 / sr));
+            this.fL += g * this.fB; const h = nz2 - this.fL - 0.5 * this.fB; this.fB += g * h;
+            fxs = this.fB * 0.28 * Math.exp(-T / 0.14) * (1 - Math.exp(-T / 0.008));
+          } else {
+            this.raspPh = (this.raspPh + (150 + 40 * nz2) / sr) % 1;
+            const g = 2 * Math.sin(Math.PI * 1700 / sr);
+            const chatter = Math.sin(2 * Math.PI * 47 * T) > -0.2 ? 1 : 0.15;
+            const src = nz2 * 0.8 + (this.raspPh * 2 - 1) * 0.9;
+            this.fL += g * this.fB; const h = src - this.fL - 0.35 * this.fB; this.fB += g * h;
+            fxs = Math.tanh(this.fB * 2.5) * 0.3 * chatter * (T < 0.32 ? 1 : Math.exp(-(T - 0.32) / 0.05)) * (1 - Math.exp(-T / 0.01));
+          }
+          this.fxT += 1 / sr;
+        }
+        out[i] = 2.2 * s.vol * (yhp * (0.45 + 0.4 * rn + 0.25 * s.load + 0.2 * s.strain) + fxs) * p.on;
+      }
+    }
+  }`;
+
+  const engine = window.__engine = {
+    ctx: null, node: null, dsp: null, on: false, load: 0, lastQ: 2, lastT: 0, ready: null,
+    async build() {
+      const ctx = this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
+      comp.connect(ctx.destination);
+      try {
+        const url = URL.createObjectURL(new Blob([DSP_SRC + `
+          registerProcessor("engine", class extends AudioWorkletProcessor {
+            constructor() { super(); this.d = new EngineDSP(sampleRate);
+              this.port.onmessage = e => e.data === "clutch" ? this.d.clutch() : Object.assign(this.d.p, e.data); }
+            process(i, o) { const ch = o[0]; this.d.process(ch[0]); for (let c = 1; c < ch.length; c++) ch[c].set(ch[0]); return true; }
+          });`], { type: "application/javascript" }));
+        await ctx.audioWorklet.addModule(url);
+        this.node = new AudioWorkletNode(ctx, "engine", { outputChannelCount: [1] });
+        this.send = m => this.node.port.postMessage(m);
+      } catch (err) { console.info("engine: worklet unavailable, using fallback", err && err.message);  // older browsers: same engine on the main thread
+        const EngineDSP = new Function(DSP_SRC + "; return EngineDSP;")();
+        const dsp = new EngineDSP(ctx.sampleRate);
+        this.node = ctx.createScriptProcessor(1024, 0, 1);
+        this.node.onaudioprocess = e => dsp.process(e.outputBuffer.getChannelData(0));
+        this.send = m => m === "clutch" ? dsp.clutch() : Object.assign(dsp.p, m);
+      }
+      this.node.connect(comp);
+    },
+    update(e) {
+      const now = performance.now() / 1000;
+      const dt = Math.max(1e-3, now - this.lastT);
+      const v = (e - this.lastQ) / dt;            // how fast the engine is being pushed
+      if (v > 0) this.load = Math.min(1, Math.max(this.load, v / 6));
+      this.lastQ = e; this.lastT = now;
+      if (!this.send) return;
+      const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+      const er = e * 10 / eStar;   // position relative to minimum ATC
+      const smooth = er <= 10 ? Math.pow(clamp((er - 3) / 7, 0, 1), 1.5) : Math.exp(-Math.pow((er - 10) / 1.1, 2));
+      this.send({
+        rpm: rpmFor(e), load: this.load, smooth,
+        strain: Math.pow(clamp((er - 10) / 4, 0, 1), 0.7),
+        lug: clamp((5 - Math.min(e, er)) / 3, 0, 1), limit: e >= 14 || er >= 14 ? 1 : 0,
+        eff: clamp((1 - cCur) / 0.28, -1, 1),
+        vol: +$("vol").value, on: this.on ? 1 : 0
+      });
+    },
+    clutch(fx) { if (this.send && this.on) { this.send("clutch"); if (fx) this.send({ fx }); } },
+    async toggle() {
+      if (!this.ctx) await (this.ready = this.ready || this.build());
+      this.on = !this.on;
+      if (this.on) { await this.ctx.resume(); this.update(qe()); }
+      else { this.update(qe()); setTimeout(() => !this.on && this.ctx.suspend(), 300); }
+      const b = $("sound"); b.textContent = "Sound: " + (this.on ? "on" : "off");
+      b.classList.toggle("on", this.on); b.setAttribute("aria-pressed", this.on);
+    }
+  };
+
+  // throttle load eases off when the slider stops moving
+  (function tick() {
+    if (engine.load > 0.001) { engine.load *= 0.9; engine.update(qe()); }
+    requestAnimationFrame(tick);
+  })();
+
+  slider.addEventListener("input", () => { stopPlay(); draw(+slider.value); });
+  $("vol").addEventListener("input", () => engine.update(qe()));
+  function costChange() {
+    vM = +$("vc").value / 100; fM = +$("fc").value / 100;
+    $("vcOut").textContent = $("vc").value + "%"; $("fcOut").textContent = $("fc").value + "%";
+    findMin(); drawGhosts(ghostC); drawCurves(kCur, cCur); draw(+slider.value); tintATC();
+  }
+  // ATC = AVC (blue) + AFC (red): purple when input prices are balanced, redder as the fixed input
+  // price rises relative to the variable one, bluer as the variable input price rises
+  function tintATC() {
+    const BLUE = [31, 95, 191], PURP = [123, 63, 181], REDC = [212, 32, 32];
+    const t = Math.min(1, Math.max(0, 0.5 + 0.5 * (fM - vM)));     // 0 = all blue, 0.5 = purple, 1 = all red
+    const [a, b, u] = t < 0.5 ? [BLUE, PURP, t / 0.5] : [PURP, REDC, (t - 0.5) / 0.5];
+    const c = a.map((v, i) => Math.round(v + (b[i] - v) * u));
+    document.documentElement.style.setProperty("--cATC", `rgb(${c.join(",")})`);
+  }
+  $("vc").addEventListener("input", costChange);
+  $("fc").addEventListener("input", costChange);
+  // show / hide each curve (its line, label, dot and panel row)
+  document.querySelectorAll(".chip").forEach(b => b.addEventListener("click", () => {
+    const on = b.getAttribute("aria-pressed") !== "true", c = b.dataset.c;
+    b.setAttribute("aria-pressed", on);
+    const els = c === "ghost" ? ["g0", "g1", "g2", "g3", "gl0", "gl1", "gl2", "gl3"] : ["p" + c, "t" + c, "d" + c];
+    for (const id of els) $(id).classList.toggle("off", !on);
+    if (c !== "ghost") $("r" + c).classList.toggle("dim", !on);
+  }));
+  document.querySelectorAll(".gate button[data-g]").forEach(b => b.addEventListener("click", () => { stopPlay(); shiftTo(+b.dataset.g); }));
+  document.querySelectorAll(".gate button[data-s]").forEach(b => b.addEventListener("click", () => setScale(b.dataset.s)));
+  $("sound").addEventListener("click", () => engine.toggle());
+
+  // ---- Play: drive through the gears, holding at each minimum ATC, then shifting up ----
+  let playing = null;
+  // Reset: zero output, input prices at 100%, small factory, constant returns, every curve showing
+  $("reset").addEventListener("click", () => {
+    stopPlay();
+    slider.value = 0; $("vc").value = 100; $("fc").value = 100;
+    document.querySelectorAll(".chip").forEach(b => {
+      b.setAttribute("aria-pressed", "true");
+      const c = b.dataset.c, els = c === "ghost" ? ["g0", "g1", "g2", "g3", "gl0", "gl1", "gl2", "gl3"] : ["p" + c, "t" + c, "d" + c];
+      for (const id of els) $(id).classList.remove("off");
+      if (c !== "ghost") $("r" + c).classList.remove("dim");
+    });
+    mode = "const"; gear = 0;
+    costChange();
+    animateTo(GEARS[0], SCALE.const[0], SCALE.const);
+  });
+  function stopPlay() { if (playing) { cancelAnimationFrame(playing.raf); clearTimeout(playing.to); playing = null; $("play").textContent = "▶ Play"; } }
+  $("play").addEventListener("click", () => {
+    if (playing) return stopPlay();
+    if (+slider.value >= QMAX - 0.01) { slider.value = QMIN; if (gear !== 0) shiftTo(0); }
+    if (!engine.on) engine.toggle();
+    $("play").textContent = "❚❚ Pause";
+    let held = 0, strain = 0, waitUntil = 0, last = performance.now(), q = +slider.value;
+    playing = {};
+    const step = now => {
+      const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      if (now < waitUntil || morph) { playing.raf = requestAnimationFrame(step); return; }
+      const k = kCur, e = q / k, next = Math.min(QMAX, q + dt * 2.8 * k);
+      if (e < eStar - 1e-3 && next / k >= eStar) { q = eStar * k; held = 0; }
+      else if (Math.abs(e - eStar) < 1e-3 && held < 1.8) { held += dt; }
+      else if (gear < GEARS.length - 1 && e >= eStar * Math.min(1.45, 0.95 * GEARS[gear + 1] / GEARS[gear])) {
+        // push well past minimum ATC (but not past the next factory's minimum), strain briefly, then shift
+        if (strain < 0.7) { strain += dt; }
+        else { strain = 0; shiftTo(gear + 1); waitUntil = now + 700; }
+      }
+      else q = next;
+      slider.value = q; draw(q);
+      if (q >= QMAX) { playing.to = setTimeout(stopPlay, 1400); return; }
+      playing.raf = requestAnimationFrame(step);
+    };
+    playing.raf = requestAnimationFrame(step);
+  });
+
+  // pause the sound if the page is hidden (e.g. switching tabs in D2L)
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && engine.on) engine.toggle();
+  });
+
+  drawCurves(kCur); draw(QMIN);
+})();
+</script>
+</body>
+</html>
